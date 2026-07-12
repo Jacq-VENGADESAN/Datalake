@@ -58,19 +58,32 @@ class ObjectStore:
         response = self.client.get_object(Bucket=self.bucket, Key=key)
         return response["Body"].read()
 
-    def list_objects(self, prefix: str = "", limit: int = 100) -> list[RawObject]:
-        response = self.client.list_objects_v2(
-            Bucket=self.bucket, Prefix=prefix, MaxKeys=max(1, min(limit, 1000))
-        )
-        return [
-            RawObject(
-                key=item["Key"],
-                size=item["Size"],
-                last_modified=item.get("LastModified"),
-                etag=item.get("ETag", "").strip('"') or None,
-            )
-            for item in response.get("Contents", [])
-        ]
+    def list_objects(
+        self, prefix: str = "", limit: int = 100, offset: int = 0
+    ) -> list[RawObject]:
+        """Liste les objets raw avec une pagination limit/offset stable cote API."""
+        result: list[RawObject] = []
+        skipped = 0
+        paginator = self.client.get_paginator("list_objects_v2")
+
+        for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
+            for item in page.get("Contents", []):
+                if skipped < offset:
+                    skipped += 1
+                    continue
+
+                result.append(
+                    RawObject(
+                        key=item["Key"],
+                        size=item["Size"],
+                        last_modified=item.get("LastModified"),
+                        etag=item.get("ETag", "").strip('"') or None,
+                    )
+                )
+                if len(result) >= limit:
+                    return result
+
+        return result
 
     def stats(self) -> dict[str, int]:
         count = size = 0
@@ -83,4 +96,3 @@ class ObjectStore:
 
     def ping(self) -> None:
         self.client.head_bucket(Bucket=self.bucket)
-
