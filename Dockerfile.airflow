@@ -1,0 +1,10 @@
+FROM apache/airflow:2.10.5-python3.11
+
+COPY pyproject.toml README.md /opt/airflow/project/
+COPY src /opt/airflow/project/src
+COPY data /opt/airflow/project/data
+USER root
+RUN mkdir -p /opt/airflow/state /opt/airflow/logs && \
+    chown -R airflow:root /opt/airflow/project /opt/airflow/state /opt/airflow/logs
+USER airflow
+RUN pip install --no-cache-dir /opt/airflow/project

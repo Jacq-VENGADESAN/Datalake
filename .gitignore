@@ -1,0 +1,14 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+airflow/logs/
+airflow/airflow.db
+benchmark-results/*.json
+!benchmark-results/.gitkeep
+

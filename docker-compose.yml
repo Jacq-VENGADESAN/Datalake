@@ -1,0 +1,106 @@
+name: velibpulse
+
+x-app-environment: &app-environment
+  PROJECT_NAME: ${PROJECT_NAME:-VelibPulse Data Lake}
+  ENVIRONMENT: ${ENVIRONMENT:-development}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  S3_ENDPOINT_URL: http://minio:9000
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:-velib}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:-velib-secret}
+  S3_REGION: eu-west-3
+  S3_RAW_BUCKET: raw
+  DATABASE_URL: postgresql+psycopg2://velib:velib@postgres:5432/velib
+  VELIB_STATUS_URL: https://velib-metropole-opendata.smovengo.cloud/opendata/Velib_Metropole/station_status.json
+  REFERENCE_CSV_PATH: /app/data/source/stations_reference.csv
+
+services:
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-velib}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-velib-secret}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: velib
+      POSTGRES_PASSWORD: velib
+      POSTGRES_DB: velib
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U velib -d velib"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  init:
+    build: .
+    command: python -m src.cli run
+    environment: *app-environment
+    depends_on:
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build: .
+    environment: *app-environment
+    ports:
+      - "8000:8000"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  airflow:
+    profiles: ["orchestration"]
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    command: >-
+      bash -c "airflow db init && airflow db migrate &&
+      (airflow users create --username airflow --password airflow --firstname Jacq --lastname VENGADESAN --role Admin --email jacq@example.com || true) &&
+      airflow scheduler & exec airflow webserver"
+    environment:
+      <<: *app-environment
+      REFERENCE_CSV_PATH: /opt/airflow/project/data/source/stations_reference.csv
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/state/airflow.db
+      PYTHONPATH: /opt/airflow/project
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./dags:/opt/airflow/dags:ro
+      - airflow-data:/opt/airflow/state
+      - airflow-logs:/opt/airflow/logs
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
+volumes:
+  minio-data:
+  postgres-data:
+  airflow-data:
+  airflow-logs:
