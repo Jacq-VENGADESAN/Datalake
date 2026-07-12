@@ -60,9 +60,10 @@ def raw(
     service: Service,
     prefix: str = Query(default="", max_length=255),
     limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
 ) -> dict:
     try:
-        objects = service.store.list_objects(prefix=prefix, limit=limit)
+        objects = service.store.list_objects(prefix=prefix, limit=limit, offset=offset)
     except ClientError as exc:
         raise HTTPException(status_code=503, detail=f"Zone raw indisponible: {exc}") from exc
     return {
@@ -75,6 +76,8 @@ def raw(
             }
             for item in objects
         ],
+        "limit": limit,
+        "offset": offset,
         "returned": len(objects),
     }
 

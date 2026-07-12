@@ -21,10 +21,13 @@ Les temps individuels du lot de 100 sont :
 - rapide : 60,481 ; 76,326 ; 98,683 ; 242,800 ; 76,681 ms.
 
 La quatrième mesure rapide est un outlier visible. Le choix de la médiane empêche ce pic
-ponctuel de fausser la conclusion. Le fichier brut généré par le script se trouve dans
-`benchmark-results/latest.json` et peut être régénéré avec :
+ponctuel de fausser la conclusion.
+
+Le script génère localement `benchmark-results/latest.json`. Ce fichier brut est
+volontairement ignoré par Git afin d'éviter de versionner des résultats dépendants de la
+machine ; les mesures de référence conservées dans le dépôt sont celles de ce document.
+Le rapport JSON peut être régénéré avec :
 
 ```powershell
 python scripts/benchmark.py --url http://localhost:8000 --repeats 5
 ```
-

@@ -19,7 +19,9 @@ class FakeObject:
 
 
 class FakeStore:
-    def list_objects(self, prefix: str, limit: int):
+    def list_objects(self, prefix: str, limit: int, offset: int):
+        if offset > 0:
+            return []
         return [FakeObject()] if not prefix or "api".startswith(prefix) else []
 
     def get_bytes(self, key: str) -> bytes:
@@ -81,7 +83,11 @@ def test_root_is_personalized() -> None:
 def test_required_read_endpoints() -> None:
     assert client.get("/health").status_code == 200
     assert client.get("/stats").status_code == 200
-    assert client.get("/raw").json()["returned"] == 1
+    raw_response = client.get("/raw?limit=10&offset=0").json()
+    assert raw_response["returned"] == 1
+    assert raw_response["limit"] == 10
+    assert raw_response["offset"] == 0
+    assert client.get("/raw?offset=1").json()["returned"] == 0
     assert client.get("/raw/api/2026/status.json").json() == {"ok": True}
     assert client.get("/staging?station_code=123&limit=5").json()["items"][0][
         "station_code"
@@ -92,6 +98,8 @@ def test_required_read_endpoints() -> None:
 
 
 def test_pagination_is_bounded() -> None:
+    assert client.get("/raw?limit=0").status_code == 422
+    assert client.get("/raw?offset=-1").status_code == 422
     assert client.get("/staging?limit=0").status_code == 422
     assert client.get("/curated?limit=1001").status_code == 422
 
@@ -133,4 +141,3 @@ def test_ingest_validation_rejects_empty_or_negative_payload() -> None:
         },
     )
     assert response.status_code == 422
-
